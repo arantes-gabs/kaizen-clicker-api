@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Score {
+  id               Int      @id @default(autoincrement())
+  playerName       String   @unique
+  score            Float
+  improvementsJson String
+  elapsedSeconds   Int
+  lastSaveAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model SaveRequest {
+  id           Int      @id @default(autoincrement())
+  requestId    String   @unique
+  playerName   String
+  responseJson String
+  createdAt    DateTime @default(now())
+}
