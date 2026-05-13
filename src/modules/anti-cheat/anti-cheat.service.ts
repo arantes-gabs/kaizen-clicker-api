@@ -1,8 +1,10 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import {
   ANTI_CHEAT_MARGIN_PERCENT,
+  EXPECTED_POINTS_PER_MANUAL_CLICK,
   FactoryProjection,
   ImprovementLevels,
+  MAX_REASONABLE_CLICKS_PER_SECOND,
   calculateFactoryProjection,
   normalizeImprovementLevels,
 } from './game-rules';
@@ -10,6 +12,8 @@ import {
 export type AntiCheatValidationResult = {
   improvements: ImprovementLevels;
   projection: FactoryProjection;
+  automaticMaxScore: number;
+  manualClickScore: number;
   theoreticalMaxScore: number;
   acceptedMaxScore: number;
   marginPercent: number;
@@ -38,10 +42,13 @@ export class AntiCheatService {
       normalizedImprovements.levels,
     );
 
-    // Generous ceiling: the final submitted improvement levels are treated as
-    // active from second zero, then a 10% margin and one point are added.
-    const theoreticalMaxScore =
+    const automaticMaxScore =
       input.elapsedSeconds * projection.goodPiecesPerSecond;
+    const manualClickScore =
+      input.elapsedSeconds *
+      MAX_REASONABLE_CLICKS_PER_SECOND *
+      EXPECTED_POINTS_PER_MANUAL_CLICK;
+    const theoreticalMaxScore = automaticMaxScore + manualClickScore;
     const acceptedMaxScore = Math.ceil(
       theoreticalMaxScore * (1 + ANTI_CHEAT_MARGIN_PERCENT / 100) + 1,
     );
@@ -59,6 +66,8 @@ export class AntiCheatService {
     return {
       improvements: normalizedImprovements.levels,
       projection,
+      automaticMaxScore: roundScore(automaticMaxScore),
+      manualClickScore: roundScore(manualClickScore),
       theoreticalMaxScore: roundScore(theoreticalMaxScore),
       acceptedMaxScore,
       marginPercent: ANTI_CHEAT_MARGIN_PERCENT,

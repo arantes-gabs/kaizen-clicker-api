@@ -1,9 +1,12 @@
 import {
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma, Score } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { RateLimitExceededException } from '../../common/errors/rate-limit-exceeded.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AntiCheatService } from '../anti-cheat/anti-cheat.service';
@@ -24,6 +27,8 @@ import {
 
 @Injectable()
 export class ScoresService {
+  private readonly logger = new Logger(ScoresService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly antiCheatService: AntiCheatService,
@@ -33,25 +38,29 @@ export class ScoresService {
     const storedResponse = await this.findStoredResponse(dto.requestId);
 
     if (storedResponse) {
+      this.logger.log(
+        `Idempotent request reused requestId=${dto.requestId} playerKey=${toPlayerLogKey(dto.playerName)}`,
+      );
+
       return storedResponse;
     }
 
-    const antiCheat = this.antiCheatService.validateScore({
-      score: dto.score,
-      elapsedSeconds: dto.elapsedSeconds,
-      improvements: dto.improvements,
-    });
+    const antiCheat = this.validateScoreWithLogging(dto);
 
     const improvementsJson = JSON.stringify(antiCheat.improvements);
     const now = new Date();
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const response = await this.prisma.$transaction(async (tx) => {
         const repeatedRequest = await tx.saveRequest.findUnique({
           where: { requestId: dto.requestId },
         });
 
         if (repeatedRequest) {
+          this.logger.log(
+            `Idempotent request reused requestId=${dto.requestId} playerKey=${toPlayerLogKey(dto.playerName)}`,
+          );
+
           return this.parseStoredResponse(repeatedRequest.responseJson);
         }
 
@@ -118,11 +127,27 @@ export class ScoresService {
 
         return response;
       });
+
+      this.logger.log(
+        `Score save accepted requestId=${dto.requestId} playerKey=${toPlayerLogKey(dto.playerName)} saved=${response.saved} bestScore=${response.bestScore} rank=${response.rank}`,
+      );
+
+      return response;
     } catch (error) {
+      if (error instanceof RateLimitExceededException) {
+        this.logger.warn(
+          `Rate limit exceeded playerKey=${toPlayerLogKey(dto.playerName)} retryAfterSeconds=${error.retryAfterSeconds}`,
+        );
+      }
+
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         const response = await this.findStoredResponse(dto.requestId);
 
         if (response) {
+          this.logger.log(
+            `Idempotent request reused after unique conflict requestId=${dto.requestId} playerKey=${toPlayerLogKey(dto.playerName)}`,
+          );
+
           return response;
         }
       }
@@ -133,6 +158,8 @@ export class ScoresService {
 
   async getTopScores(limit?: number): Promise<TopScoreResponse[]> {
     const sanitizedLimit = sanitizeLimit(limit);
+    this.logger.log(`Ranking requested limit=${sanitizedLimit}`);
+
     const scores = await this.prisma.score.findMany({
       orderBy: [{ score: 'desc' }, { updatedAt: 'asc' }],
       take: sanitizedLimit,
@@ -170,6 +197,24 @@ export class ScoresService {
     });
 
     return betterScoresCount + 1;
+  }
+
+  private validateScoreWithLogging(dto: CreateScoreDto) {
+    try {
+      return this.antiCheatService.validateScore({
+        score: dto.score,
+        elapsedSeconds: dto.elapsedSeconds,
+        improvements: dto.improvements,
+      });
+    } catch (error) {
+      if (error instanceof UnprocessableEntityException) {
+        this.logger.warn(
+          `Score rejected by anti-cheat playerKey=${toPlayerLogKey(dto.playerName)} submittedScore=${dto.score} elapsedSeconds=${dto.elapsedSeconds}`,
+        );
+      }
+
+      throw error;
+    }
   }
 
   private ensurePlayerCanSave(currentScore: Score | null, now: Date): void {
@@ -263,4 +308,8 @@ function isSaveScoreResponse(input: unknown): input is SaveScoreResponse {
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
+function toPlayerLogKey(playerName: string): string {
+  return createHash('sha256').update(playerName).digest('hex').slice(0, 12);
 }

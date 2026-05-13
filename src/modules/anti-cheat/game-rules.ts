@@ -6,6 +6,8 @@ export const INITIAL_FACTORY_STATE = {
 
 export const MAX_IMPROVEMENT_LEVEL = 5;
 export const ANTI_CHEAT_MARGIN_PERCENT = 10;
+export const MAX_REASONABLE_CLICKS_PER_SECOND = 8;
+export const EXPECTED_POINTS_PER_MANUAL_CLICK = 1;
 export const RATE_LIMIT_WINDOW_SECONDS = 10;
 export const DEFAULT_TOP_LIMIT = 10;
 export const MAX_TOP_LIMIT = 50;
