@@ -25,6 +25,7 @@ describe('AntiCheatService', () => {
     });
 
     expect(result.acceptedMaxScore).toBeGreaterThanOrEqual(100);
+    expect(result.manualClickScore).toBe(2400);
     expect(result.improvements.fiveS).toBe(1);
   });
 
