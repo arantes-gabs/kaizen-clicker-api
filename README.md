@@ -10,6 +10,19 @@ Backend NestJS para o desafio tecnico Kaizen Clicker.
 - Prisma 7
 - PostgreSQL via Docker
 
+## Architecture
+
+```mermaid
+flowchart LR
+  Frontend[React/Vite frontend] --> Api[NestJS API]
+  Api --> Prisma[Prisma ORM]
+  Prisma --> Db[(PostgreSQL)]
+
+  Vercel[Vercel frontend] -. deploy .-> Frontend
+  RenderApi[Render backend] -. deploy .-> Api
+  RenderDb[Render or managed Postgres] -. host .-> Db
+```
+
 ## Setup
 
 ```bash
@@ -28,6 +41,10 @@ CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 ```
 
 Por padrao a API libera CORS para o frontend local do Vite em `http://localhost:5173`.
+
+O PostgreSQL foi escolhido como banco de dados de produção porque o projeto precisa armazenar de forma persistente e confiável as pontuações dos jogadores, dados do ranking, requisições idempotentes e controle de rate limit.
+
+Embora SQLite fosse mais simples para desenvolvimento local, ele não é ideal para este cenário de deploy, pois bancos baseados em arquivo podem ser perdidos ou resetados em ambientes de hospedagem com armazenamento efêmero. O PostgreSQL oferece uma camada de persistência mais adequada para produção, funciona bem com plataformas hospedadas e possui boa integração com migrations do Prisma.
 
 ## Endpoints
 
@@ -85,8 +102,9 @@ O backend calcula um teto teorico a partir de:
 - reducoes de defeito;
 - OEE e reducao de downtime;
 - efeito condicional do Just-In-Time quando defeitos ficam abaixo de 5%.
+- producao manual por cliques, usando media generosa de 8 cliques por segundo.
 
-Premissa propositalmente generosa: os niveis finais enviados sao tratados como se estivessem ativos desde o segundo zero. Depois disso a API adiciona margem de 10% e 1 ponto. Isso evita reprovar saves legitimos por diferenca de simulacao no frontend, mas bloqueia pontuacoes impossiveis.
+Premissa propositalmente generosa: os niveis finais enviados sao tratados como se estivessem ativos desde o segundo zero. O backend tambem permite uma media manual generosa de cliques para nao rejeitar jogadores legitimos quando o frontend combina clique ativo com producao automatica. Depois disso a API adiciona margem de 10% e 1 ponto. Isso evita reprovar saves legitimos por diferenca de simulacao no frontend, mas bloqueia pontuacoes impossiveis.
 
 ## Scripts uteis
 
