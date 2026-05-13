@@ -8,7 +8,8 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: resolveCorsOrigins(),
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    optionsSuccessStatus: 204,
   });
 
   app.useGlobalPipes(
